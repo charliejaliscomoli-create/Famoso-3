@@ -1,0 +1,6 @@
+{
+  "name": "Famous Asistente",
+  "description": "Asistente personal de productividad con comandos y síntesis de voz, gestión de tareas, hábitos y notas.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

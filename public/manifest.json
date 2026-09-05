@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Famous Asistente - Productividad",
+  "short_name": "FamousAsist",
+  "description": "Asistente personal de productividad con comandos y síntesis de voz, tareas, hábitos y notas rápidas.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090d16",
+  "theme_color": "#4f46e5",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
