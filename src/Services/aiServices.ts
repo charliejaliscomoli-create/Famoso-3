@@ -1,10 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-// Inicialización de la API de Gemini utilizando la variable de entorno de Vite
-const ai = new GoogleGenAI({
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
-});
-
 // 1. Declaración de herramienta: Crear tarea
 const createTaskDeclaration = {
   name: 'createTask',
@@ -79,6 +74,110 @@ const getPendingTasksDeclaration = {
   },
 };
 
+// 5. Declaración de herramienta: Temporizador / Alarma Nativa (Capacitor)
+const setNativeTimerDeclaration = {
+  name: 'setNativeTimer',
+  description:
+    'Programa un temporizador, alarma o recordatorio sonoro directo en el dispositivo móvil o navegador mediante Capacitor Local Notifications.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Motivo o título del temporizador/alarma (ej. Sacar el pan, Llamar a cliente).',
+      },
+      seconds: {
+        type: Type.NUMBER,
+        description:
+          'Duración total en segundos (ej. 300 para 5 minutos, 60 para 1 minuto, 10 para 10 segundos).',
+      },
+      minutes: {
+        type: Type.NUMBER,
+        description: 'Duración alternativa en minutos.',
+      },
+    },
+    required: ['title'],
+  },
+};
+
+// 6. Declaración de herramienta: Revisar Correos (Gmail)
+const checkUnreadEmailsDeclaration = {
+  name: 'checkUnreadEmails',
+  description: 'Revisa y lista los correos electrónicos no leídos o bandeja de entrada de Gmail.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      maxResults: {
+        type: Type.NUMBER,
+        description: 'Cantidad máxima de correos a consultar (por defecto 5).',
+      },
+    },
+  },
+};
+
+// 7. Declaración de herramienta: Responder Correo (Gmail)
+const replyToEmailDeclaration = {
+  name: 'replyToEmail',
+  description: 'Redacta y envía una respuesta a un correo electrónico recibido.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      emailIdOrSenderOrSubject: {
+        type: Type.STRING,
+        description: 'Remitente, asunto o ID del correo que se desea responder.',
+      },
+      replyBody: {
+        type: Type.STRING,
+        description: 'Texto o cuerpo de la respuesta a enviar.',
+      },
+    },
+    required: ['replyBody'],
+  },
+};
+
+// 8. Declaración de herramienta: Consultar Agenda (Google Calendar)
+const getTodayAgendaDeclaration = {
+  name: 'getTodayAgenda',
+  description: 'Consulta los eventos, reuniones y compromisos agendados para hoy en Google Calendar.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      date: {
+        type: Type.STRING,
+        description: 'Fecha a consultar (ej. "today" o "hoy").',
+      },
+    },
+  },
+};
+
+// 9. Declaración de herramienta: Agendar Evento (Google Calendar)
+const createCalendarEventDeclaration = {
+  name: 'createCalendarEvent',
+  description: 'Agenda una nueva reunión o compromiso en la agenda de Google Calendar.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Título o motivo de la reunión o compromiso.',
+      },
+      startTime: {
+        type: Type.STRING,
+        description: 'Hora de inicio en formato HH:MM (ej. 15:30 o 10:00).',
+      },
+      durationMinutes: {
+        type: Type.NUMBER,
+        description: 'Duración en minutos (por defecto 30).',
+      },
+      description: {
+        type: Type.STRING,
+        description: 'Notas o detalles adicionales del evento.',
+      },
+    },
+    required: ['title'],
+  },
+};
+
 export interface ToolCallResult {
   name: string;
   args: Record<string, any>;
@@ -91,7 +190,7 @@ export interface ProcessCommandOutput {
 
 /**
  * Procesa la orden de voz o texto del usuario mediante Gemini y Function Calling.
- * Configurado para respuestas breves, claras y directas aptas para voz (TTS).
+ * Configurado para respuestas cortas, ejecutivas y directas aptas para voz (TTS).
  */
 export async function processUserCommand(userPrompt: string): Promise<ProcessCommandOutput> {
   const apiKey =
@@ -111,11 +210,11 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
     const client = new GoogleGenAI({ apiKey: apiKey.trim() });
 
     const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: userPrompt,
       config: {
         systemInstruction:
-          'Eres Famous Asistente, un asistente administrativo personal de productividad ágil y eficiente. Ayudas a gestionar tareas y notas mediante comandos de voz. Si el usuario pide crear una tarea, agregar una nota, completar una tarea o consultar pendientes, invoca la herramienta correspondiente. Responde SIEMPRE con frases breves, claras y directas (máximo 1 o 2 oraciones breves), optimizadas para síntesis de voz.',
+          'Eres Famous Asistente, el administrador personal y ejecutivo de mano derecha del usuario. Tu tono es sumamente profesional, eficiente, claro y conciso. Respondes SIEMPRE con oraciones cortas (máximo 1 o 2 frases breves), diseñadas para ser leídas con total claridad por síntesis de voz (TTS). Si la orden requiere crear tareas, completar tareas, consultar pendientes, guardar notas, programar temporizadores/alarmas con Capacitor, revisar o responder correos con Gmail, o consultar y agendar compromisos con Google Calendar, utiliza SIEMPRE la herramienta adecuada.',
         tools: [
           {
             functionDeclarations: [
@@ -123,6 +222,11 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
               addNoteDeclaration,
               completeTaskDeclaration,
               getPendingTasksDeclaration,
+              setNativeTimerDeclaration,
+              checkUnreadEmailsDeclaration,
+              replyToEmailDeclaration,
+              getTodayAgendaDeclaration,
+              createCalendarEventDeclaration,
             ],
           },
         ],
@@ -143,13 +247,13 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
 
     return {
       toolCall: null,
-      text: response.text || 'Orden comprendida.',
+      text: response.text || 'Orden recibida y procesada.',
     };
   } catch (error: any) {
     console.error('Detalle del error al llamar a Gemini:', error);
     return {
       toolCall: null,
-      text: `Error de conexión con la IA: ${error?.message || 'Revisa la consola para más detalles.'}`,
+      text: `Error de conexión con la IA: ${error?.message || 'Revisa la consola para detalles.'}`,
     };
   }
 }
