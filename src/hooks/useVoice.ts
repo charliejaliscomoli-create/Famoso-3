@@ -21,27 +21,59 @@ export const useVoice = (onResult?: (text: string) => void): UseVoiceReturn => {
 
   const recognitionRef = useRef<any>(null);
   const onResultRef = useRef(onResult);
+  const isRecognizingRef = useRef<boolean>(false);
+  const isStartingRef = useRef<boolean>(false);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
     onResultRef.current = onResult;
   }, [onResult]);
 
+  // Pre-load available speech synthesis voices
   useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    const loadVoices = () => {
+      try {
+        const available = window.speechSynthesis.getVoices();
+        if (available && available.length > 0) {
+          voicesRef.current = available;
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  const createRecognitionInstance = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setHasSupport(false);
-      return;
+      return null;
     }
 
     try {
       const rec = new SpeechRecognition();
       rec.continuous = false;
       rec.interimResults = false;
-      rec.lang = 'es-ES'; // O es-MX según preferencia regional
+      rec.lang = 'es-ES';
 
       rec.onstart = () => {
+        isRecognizingRef.current = true;
+        isStartingRef.current = false;
         setIsListening(true);
         setError(null);
       };
@@ -55,26 +87,37 @@ export const useVoice = (onResult?: (text: string) => void): UseVoiceReturn => {
             onResultRef.current(spokenText);
           }
         }
-        setIsListening(false);
+        // Note: Do NOT set isListening to false here.
+        // Wait for onend to ensure the browser audio pipeline has cleanly closed.
       };
 
       rec.onerror = (event: any) => {
         console.warn('SpeechRecognition error:', event.error);
-        if (event.error !== 'no-speech') {
+        isRecognizingRef.current = false;
+        isStartingRef.current = false;
+        setIsListening(false);
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
           setError(`Error de reconocimiento: ${event.error}`);
         }
-        setIsListening(false);
       };
 
       rec.onend = () => {
+        isRecognizingRef.current = false;
+        isStartingRef.current = false;
         setIsListening(false);
       };
 
       recognitionRef.current = rec;
+      return rec;
     } catch (err: any) {
       console.error('Error al inicializar SpeechRecognition:', err);
       setHasSupport(false);
+      return null;
     }
+  }, []);
+
+  useEffect(() => {
+    createRecognitionInstance();
 
     return () => {
       if (recognitionRef.current) {
@@ -83,65 +126,127 @@ export const useVoice = (onResult?: (text: string) => void): UseVoiceReturn => {
         } catch {
           // ignore
         }
+        recognitionRef.current = null;
       }
+      isRecognizingRef.current = false;
+      isStartingRef.current = false;
     };
-  }, []);
+  }, [createRecognitionInstance]);
 
   const startListening = useCallback(() => {
     setError(null);
-    if (!recognitionRef.current) {
-      setError('El reconocimiento de voz no está disponible.');
-      return;
-    }
 
-    // Detener cualquier síntesis de voz en curso para no escucharse a sí mismo
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    // Stop ongoing speech synthesis so mic doesn't capture it
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
       setIsSpeaking(false);
     }
 
-    try {
-      setTranscript('');
-      recognitionRef.current.start();
-    } catch (err: any) {
-      // Si ya estaba iniciado, reiniciar
-      try {
-        recognitionRef.current.stop();
-        setTimeout(() => {
-          recognitionRef.current?.start();
-        }, 150);
-      } catch {
-        setIsListening(false);
+    // If already active or in process of starting, ignore to prevent duplicate starts
+    if (isRecognizingRef.current || isStartingRef.current) {
+      return;
+    }
+
+    let rec = recognitionRef.current;
+    if (!rec) {
+      rec = createRecognitionInstance();
+      if (!rec) {
+        setError('El reconocimiento de voz no está disponible.');
+        return;
       }
     }
-  }, []);
+
+    isStartingRef.current = true;
+    setTranscript('');
+
+    try {
+      rec.start();
+    } catch (err: any) {
+      isStartingRef.current = false;
+
+      // If the engine is already started according to the browser, sync state safely
+      if (err.name === 'InvalidStateError' || (err.message && err.message.includes('already started'))) {
+        isRecognizingRef.current = true;
+        setIsListening(true);
+        return;
+      }
+
+      console.warn('Error iniciando reconocimiento, recreando instancia:', err);
+
+      // Cleanly reset and re-attempt
+      try {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch {
+            // ignore
+          }
+        }
+        const freshRec = createRecognitionInstance();
+        if (freshRec) {
+          setTimeout(() => {
+            try {
+              if (!isRecognizingRef.current && !isStartingRef.current) {
+                isStartingRef.current = true;
+                freshRec.start();
+              }
+            } catch (retryErr) {
+              console.warn('Fallo en reintento de reconocimiento:', retryErr);
+              isStartingRef.current = false;
+              isRecognizingRef.current = false;
+              setIsListening(false);
+            }
+          }, 150);
+        }
+      } catch {
+        setIsListening(false);
+        isRecognizingRef.current = false;
+        isStartingRef.current = false;
+      }
+    }
+  }, [createRecognitionInstance]);
 
   const stopListening = useCallback(() => {
+    isStartingRef.current = false;
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        // abort() immediately halts listening and frees the audio stream
+        recognitionRef.current.abort();
       } catch {
         // ignore
       }
     }
+    isRecognizingRef.current = false;
     setIsListening(false);
   }, []);
 
   const stopSpeaking = useCallback(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
       setIsSpeaking(false);
     }
   }, []);
 
   const speak = useCallback((text: string, onEnd?: () => void) => {
-    if (!('speechSynthesis' in window)) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       console.warn('SpeechSynthesis no está soportado en este navegador.');
       if (onEnd) onEnd();
       return;
     }
 
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
 
     if (!text || !text.trim()) {
       setIsSpeaking(false);
@@ -155,11 +260,20 @@ export const useVoice = (onResult?: (text: string) => void): UseVoiceReturn => {
     utterance.pitch = 1.0;
 
     // Intentar seleccionar una voz nativa en español de buena calidad
-    const voices = window.speechSynthesis.getVoices();
+    const availableVoices =
+      voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+
     const spanishVoice =
-      voices.find((v) => v.lang.startsWith('es') && v.name.includes('Natural')) ||
-      voices.find((v) => v.lang === 'es-ES') ||
-      voices.find((v) => v.lang.startsWith('es'));
+      availableVoices.find((v) => v.lang.startsWith('es') && v.name.toLowerCase().includes('natural')) ||
+      availableVoices.find(
+        (v) =>
+          v.lang.startsWith('es') &&
+          (v.name.toLowerCase().includes('google') ||
+            v.name.toLowerCase().includes('sabina') ||
+            v.name.toLowerCase().includes('diego'))
+      ) ||
+      availableVoices.find((v) => v.lang === 'es-ES') ||
+      availableVoices.find((v) => v.lang.startsWith('es'));
 
     if (spanishVoice) {
       utterance.voice = spanishVoice;
@@ -180,7 +294,13 @@ export const useVoice = (onResult?: (text: string) => void): UseVoiceReturn => {
       if (onEnd) onEnd();
     };
 
-    window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Error al invocar speak:', err);
+      setIsSpeaking(false);
+      if (onEnd) onEnd();
+    }
   }, []);
 
   return {

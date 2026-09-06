@@ -178,6 +178,99 @@ const createCalendarEventDeclaration = {
   },
 };
 
+// 10. Declaración de herramienta: Consultar Google Tasks
+const getGoogleTasksDeclaration = {
+  name: 'getGoogleTasks',
+  description: 'Consulta y lista las tareas y pendientes guardados en la cuenta de Google Tasks del usuario.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
+// 11. Declaración de herramienta: Crear tarea en Google Tasks
+const createGoogleTaskDeclaration = {
+  name: 'createGoogleTask',
+  description: 'Crea y sincroniza una nueva tarea o pendiente directamente en Google Tasks.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Título o nombre de la tarea para Google Tasks.',
+      },
+      notes: {
+        type: Type.STRING,
+        description: 'Notas o descripción adicional de la tarea.',
+      },
+      due: {
+        type: Type.STRING,
+        description: 'Fecha límite de cumplimiento en formato YYYY-MM-DD.',
+      },
+    },
+    required: ['title'],
+  },
+};
+
+// 12. Declaración de herramienta: Completar tarea en Google Tasks
+const completeGoogleTaskDeclaration = {
+  name: 'completeGoogleTask',
+  description: 'Marca una tarea existente de Google Tasks como completada buscando por su título o ID.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      taskIdOrTitle: {
+        type: Type.STRING,
+        description: 'Título o identificador de la tarea a marcar como completada.',
+      },
+    },
+    required: ['taskIdOrTitle'],
+  },
+};
+
+// 13. Declaración de herramienta: Buscar Contactos (Google Contacts / People API)
+const searchContactsDeclaration = {
+  name: 'searchContacts',
+  description: 'Busca contactos, clientes o colaboradores por nombre, correo o teléfono en la libreta de Google Contacts.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      query: {
+        type: Type.STRING,
+        description: 'Nombre, apellido, correo o número telefónico del contacto a buscar.',
+      },
+    },
+  },
+};
+
+// 14. Declaración de herramienta: Crear Contacto (Google Contacts / People API)
+const createContactDeclaration = {
+  name: 'createContact',
+  description: 'Agrega un nuevo contacto con su nombre, correo, teléfono o empresa a Google Contacts.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      name: {
+        type: Type.STRING,
+        description: 'Nombre completo o de la persona a agendar.',
+      },
+      email: {
+        type: Type.STRING,
+        description: 'Dirección de correo electrónico del contacto.',
+      },
+      phone: {
+        type: Type.STRING,
+        description: 'Número telefónico del contacto.',
+      },
+      company: {
+        type: Type.STRING,
+        description: 'Empresa u organización a la que pertenece.',
+      },
+    },
+    required: ['name'],
+  },
+};
+
 export interface ToolCallResult {
   name: string;
   args: Record<string, any>;
@@ -214,7 +307,7 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
       contents: userPrompt,
       config: {
         systemInstruction:
-          'Eres Famous Asistente, el administrador personal y ejecutivo de mano derecha del usuario. Tu tono es sumamente profesional, eficiente, claro y conciso. Respondes SIEMPRE con oraciones cortas (máximo 1 o 2 frases breves), diseñadas para ser leídas con total claridad por síntesis de voz (TTS). Si la orden requiere crear tareas, completar tareas, consultar pendientes, guardar notas, programar temporizadores/alarmas con Capacitor, revisar o responder correos con Gmail, o consultar y agendar compromisos con Google Calendar, utiliza SIEMPRE la herramienta adecuada.',
+          'Eres Famous Asistente, el administrador personal y ejecutivo de mano derecha del usuario. Tu tono es sumamente profesional, eficiente, claro y conciso. Respondes SIEMPRE con oraciones cortas (máximo 1 o 2 frases breves), diseñadas para ser leídas con total claridad por síntesis de voz (TTS). Si la orden requiere crear tareas, completar tareas, consultar pendientes, guardar notas, programar temporizadores/alarmas con Capacitor, revisar o responder correos con Gmail, consultar y agendar compromisos con Google Calendar, gestionar pendientes en Google Tasks o buscar/crear contactos en Google Contacts, utiliza SIEMPRE la herramienta adecuada.',
         tools: [
           {
             functionDeclarations: [
@@ -227,6 +320,11 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
               replyToEmailDeclaration,
               getTodayAgendaDeclaration,
               createCalendarEventDeclaration,
+              getGoogleTasksDeclaration,
+              createGoogleTaskDeclaration,
+              completeGoogleTaskDeclaration,
+              searchContactsDeclaration,
+              createContactDeclaration,
             ],
           },
         ],

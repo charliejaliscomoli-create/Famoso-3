@@ -19,6 +19,7 @@ import { FocusView } from './components/FocusView';
 import { NotesView } from './components/NotesView';
 import { AIAssistantView } from './components/AIAssistantView';
 import { MetricsView } from './components/MetricsView';
+import { ContactsView } from './components/ContactsView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -296,6 +297,7 @@ export default function App() {
             soundEnabled={soundEnabled}
           />
         )}
+        {activeTab === 'contactos' && <ContactsView />}
         {activeTab === 'habitos' && (
           <HabitsView
             habits={habits}

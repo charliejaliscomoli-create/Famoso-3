@@ -49,4 +49,4 @@ export interface Note {
   color: string;
 }
 
-export type NavTab = 'tareas' | 'habitos' | 'enfoque' | 'notas' | 'asistente' | 'metricas';
+export type NavTab = 'tareas' | 'habitos' | 'enfoque' | 'notas' | 'asistente' | 'contactos' | 'metricas';

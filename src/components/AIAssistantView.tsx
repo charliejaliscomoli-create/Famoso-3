@@ -69,6 +69,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [inputText, setInputText] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const stopListeningRef = useRef<() => void>(() => {});
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -91,6 +92,12 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const handleExecuteCommand = async (command: string) => {
     const cleanCommand = command.trim();
     if (!cleanCommand) return;
+
+    try {
+      stopListeningRef.current();
+    } catch {
+      // ignore
+    }
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -332,6 +339,10 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       handleExecuteCommand(transcript);
     }
   });
+
+  useEffect(() => {
+    stopListeningRef.current = stopListening;
+  }, [stopListening]);
 
   const handleSubmitText = (e: React.FormEvent) => {
     e.preventDefault();

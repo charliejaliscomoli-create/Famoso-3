@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Task, TaskPriority, TaskCategory } from '../types';
-import { Plus, Check, Trash2, Calendar, Sparkles, X } from 'lucide-react';
+import { Plus, Check, Trash2, Calendar, Sparkles, X, RefreshCw, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sounds } from '../utils/audio';
 import { TODAY_STR } from '../utils/storage';
+import { googleTasksService, GoogleTaskItem } from '../Services/googleTasksService';
+import { subscribeAuth, googleSignIn, logoutGoogle, getCurrentUser } from '../Services/authService';
 
 interface TasksViewProps {
   tasks: Task[];
@@ -20,6 +22,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onDeleteTask,
   soundEnabled,
 }) => {
+  const [taskMode, setTaskMode] = useState<'app' | 'google'>('app');
+  const [googleTasks, setGoogleTasks] = useState<GoogleTaskItem[]>([]);
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
+  const [isRealGoogleApi, setIsRealGoogleApi] = useState<boolean>(false);
+  const [user, setUser] = useState(getCurrentUser());
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAiPlanModal, setShowAiPlanModal] = useState(false);
   const [aiGoal, setAiGoal] = useState('');
@@ -43,6 +52,45 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [priority, setPriority] = useState<TaskPriority>('media');
   const [category, setCategory] = useState<TaskCategory>('Trabajo');
   const [dueDate, setDueDate] = useState<string>(TODAY_STR);
+
+  // Delete confirmation for Google Task
+  const [deleteTargetGTask, setDeleteTargetGTask] = useState<GoogleTaskItem | null>(null);
+
+  useEffect(() => {
+    return subscribeAuth((u) => setUser(u));
+  }, []);
+
+  const fetchGoogleTasks = useCallback(async () => {
+    setGoogleLoading(true);
+    try {
+      const res = await googleTasksService.getTasks();
+      setGoogleTasks(res.tasks);
+      setIsRealGoogleApi(res.isRealApi);
+    } catch (err) {
+      console.error('Error cargando Google Tasks:', err);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGoogleTasks();
+    const handleSync = () => fetchGoogleTasks();
+    window.addEventListener('famous-storage-sync', handleSync);
+    return () => window.removeEventListener('famous-storage-sync', handleSync);
+  }, [fetchGoogleTasks, user]);
+
+  const handleGoogleAuth = async () => {
+    setAuthLoading(true);
+    try {
+      await googleSignIn();
+      await fetchGoogleTasks();
+    } catch (err) {
+      console.error('Error al conectar con Google:', err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const categories: (TaskCategory | 'todas')[] = [
     'todas',
@@ -78,17 +126,51 @@ export const TasksView: React.FC<TasksViewProps> = ({
     onToggleStatus(task.id);
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleToggleGoogleTask = async (gTask: GoogleTaskItem) => {
+    sounds.vibrate(50);
+    if (gTask.status !== 'completed' && soundEnabled) {
+      sounds.playCompletionSound();
+      try {
+        confetti({
+          particleCount: 40,
+          spread: 60,
+          origin: { y: 0.7 },
+          colors: ['#3b82f6', '#10b981', '#6366f1'],
+        });
+      } catch {}
+    } else {
+      sounds.playClick();
+    }
+    await googleTasksService.completeTask(gTask.id);
+    await fetchGoogleTasks();
+  };
+
+  const confirmDeleteGoogleTask = async () => {
+    if (!deleteTargetGTask) return;
+    sounds.playClick();
+    await googleTasksService.deleteTask(deleteTargetGTask.id);
+    setDeleteTargetGTask(null);
+    await fetchGoogleTasks();
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAddTask({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      priority,
-      category,
-      dueDate: dueDate || TODAY_STR,
-      status: 'pendiente',
-    });
+
+    if (taskMode === 'google') {
+      await googleTasksService.createTask(title.trim(), description.trim() || undefined, dueDate);
+      await fetchGoogleTasks();
+    } else {
+      onAddTask({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        priority,
+        category,
+        dueDate: dueDate || TODAY_STR,
+        status: 'pendiente',
+      });
+    }
+
     sounds.playClick();
     setTitle('');
     setDescription('');
@@ -132,33 +214,103 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Mode Switcher Header: App Tareas vs Google Tasks */}
+      <div className="flex items-center justify-between gap-2 bg-slate-900 border border-slate-800 p-1.5 rounded-2xl shadow-lg">
+        <div className="flex items-center gap-1.5 flex-1">
+          <button
+            onClick={() => setTaskMode('app')}
+            className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              taskMode === 'app'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span>Mis Tareas del Sistema</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-indigo-950/80 text-indigo-200 text-[10px]">
+              {tasks.filter((t) => t.status !== 'completada').length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setTaskMode('google')}
+            className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              taskMode === 'google'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              <span>Google Tasks</span>
+              {isRealGoogleApi ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+              )}
+            </span>
+            <span className="px-1.5 py-0.5 rounded-md bg-blue-950/80 text-blue-200 text-[10px]">
+              {googleTasks.filter((gt) => gt.status !== 'completed').length}
+            </span>
+          </button>
+        </div>
+
+        {taskMode === 'google' && (
+          <div className="flex items-center gap-1 shrink-0 pr-1">
+            {!user ? (
+              <button
+                onClick={handleGoogleAuth}
+                disabled={authLoading}
+                className="px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Conectar Google</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => fetchGoogleTasks()}
+                disabled={googleLoading}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800 border border-slate-700"
+                title="Sincronizar Google Tasks"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${googleLoading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Top action bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
         <div>
           <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            <span>Tareas del Día</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-indigo-500/20">
-              {tasks.filter((t) => t.status !== 'completada').length} pendientes
-            </span>
+            <span>{taskMode === 'app' ? 'Tareas del Día' : 'Sincronización con Google Tasks'}</span>
+            {taskMode === 'google' && isRealGoogleApi && (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Google Tasks API
+              </span>
+            )}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Organiza tus prioridades diarias y mantén el ritmo de ejecución.
+            {taskMode === 'app'
+              ? 'Organiza tus prioridades diarias y mantén el ritmo de ejecución.'
+              : 'Tus pendientes sincronizados directamente con la cuenta oficial de Google Tasks.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            id="btn-open-ai-planner"
-            type="button"
-            onClick={() => {
-              sounds.playClick();
-              setShowAiPlanModal(true);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-indigo-500/30 text-indigo-300 hover:text-white text-sm font-semibold transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Desglosar con IA</span>
-            <span className="sm:hidden">IA</span>
-          </button>
+          {taskMode === 'app' && (
+            <button
+              id="btn-open-ai-planner"
+              type="button"
+              onClick={() => {
+                sounds.playClick();
+                setShowAiPlanModal(true);
+              }}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-indigo-500/30 text-indigo-300 hover:text-white text-sm font-semibold transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Desglosar con IA</span>
+              <span className="sm:hidden">IA</span>
+            </button>
+          )}
           <button
             id="btn-open-add-task"
             type="button"
@@ -166,13 +318,138 @@ export const TasksView: React.FC<TasksViewProps> = ({
               sounds.playClick();
               setShowAddModal(true);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-600/30 active:scale-98 transition-all"
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md active:scale-98 transition-all ${
+              taskMode === 'google'
+                ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
+            }`}
           >
             <Plus className="w-4 h-4" />
-            <span>Nueva Tarea</span>
+            <span>{taskMode === 'google' ? 'Nueva Tarea Google' : 'Nueva Tarea'}</span>
           </button>
         </div>
       </div>
+
+      {/* Render Google Tasks if mode === 'google' */}
+      {taskMode === 'google' && (
+        <div className="space-y-3">
+          {googleLoading && googleTasks.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 text-xs">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-400" />
+              Obteniendo pendientes desde Google Tasks...
+            </div>
+          ) : googleTasks.length === 0 ? (
+            <div className="text-center py-12 px-4 rounded-2xl bg-slate-900/30 border border-dashed border-slate-800">
+              <CheckCircle2 className="w-8 h-8 text-blue-500/60 mx-auto mb-2" />
+              <p className="text-sm font-medium text-slate-300">No hay tareas en Google Tasks</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                Crea una nueva tarea o pídele al asistente de voz "Agrega una tarea en Google Tasks".
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {googleTasks.map((gt) => {
+                const isCompleted = gt.status === 'completed';
+                return (
+                  <div
+                    key={gt.id}
+                    className={`group flex items-start justify-between gap-3 p-3.5 rounded-2xl border transition-all ${
+                      isCompleted
+                        ? 'bg-slate-900/30 border-slate-800/50 opacity-70'
+                        : 'bg-slate-900/90 hover:bg-slate-900 border-blue-500/20 shadow-sm'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGoogleTask(gt)}
+                      className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center border transition-all active:scale-90 flex-shrink-0 ${
+                        isCompleted
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-600/30'
+                          : 'border-slate-700 bg-slate-950/60 hover:border-blue-500 text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <h3
+                        className={`text-sm font-medium leading-snug transition-all ${
+                          isCompleted ? 'line-through text-slate-400' : 'text-slate-100'
+                        }`}
+                      >
+                        {gt.title}
+                      </h3>
+                      {gt.notes && (
+                        <p
+                          className={`text-xs mt-1 leading-relaxed ${
+                            isCompleted ? 'line-through text-slate-400' : 'text-slate-300'
+                          }`}
+                        >
+                          {gt.notes}
+                        </p>
+                      )}
+                      {gt.due && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-blue-400 mt-1.5">
+                          <Calendar className="w-3 h-3" />
+                          <span>{new Date(gt.due).toLocaleDateString()}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTargetGTask(gt)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      title="Eliminar de Google Tasks"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal for Google Task (MANDATORY per Workspace rules) */}
+      {deleteTargetGTask && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-100">
+                ¿Eliminar "{deleteTargetGTask.title}" de Google Tasks?
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Esta acción eliminará la tarea de tu cuenta oficial de Google Tasks permanentemente.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteTargetGTask(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteGoogleTask}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-red-600/20"
+              >
+                Sí, Eliminar de Google Tasks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Render App Tasks if mode === 'app' */}
+      {taskMode === 'app' && (
+        <>
 
       {/* Filter and search bar */}
       <div className="space-y-2">
@@ -590,6 +867,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

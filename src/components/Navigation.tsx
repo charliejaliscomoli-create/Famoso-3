@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, Flame, Timer, StickyNote, BarChart3, Bot } from 'lucide-react';
+import { CheckSquare, Flame, Timer, StickyNote, BarChart3, Bot, Users } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { NavTab } from '../types';
 
@@ -18,10 +18,22 @@ export const Navigation: React.FC<NavigationProps> = ({
 }) => {
   const tabs = [
     {
+      id: 'asistente' as NavTab,
+      label: 'Asistente IA',
+      icon: Bot,
+      badge: null,
+    },
+    {
       id: 'tareas' as NavTab,
       label: 'Tareas',
       icon: CheckSquare,
       badge: pendingTasksCount > 0 ? pendingTasksCount : null,
+    },
+    {
+      id: 'contactos' as NavTab,
+      label: 'Contactos',
+      icon: Users,
+      badge: null,
     },
     {
       id: 'habitos' as NavTab,
@@ -33,12 +45,6 @@ export const Navigation: React.FC<NavigationProps> = ({
       id: 'enfoque' as NavTab,
       label: 'Enfoque',
       icon: Timer,
-      badge: null,
-    },
-    {
-      id: 'asistente' as NavTab,
-      label: 'Asistente IA',
-      icon: Bot,
       badge: null,
     },
     {
