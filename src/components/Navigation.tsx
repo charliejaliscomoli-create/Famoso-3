@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, Flame, Timer, StickyNote, BarChart3, Bot, Users } from 'lucide-react';
+import { CheckSquare, Flame, Timer, StickyNote, BarChart3, Bot, Users, Globe } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { NavTab } from '../types';
 
@@ -28,6 +28,12 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: 'Tareas',
       icon: CheckSquare,
       badge: pendingTasksCount > 0 ? pendingTasksCount : null,
+    },
+    {
+      id: 'workspace' as NavTab,
+      label: 'Workspace',
+      icon: Globe,
+      badge: null,
     },
     {
       id: 'contactos' as NavTab,

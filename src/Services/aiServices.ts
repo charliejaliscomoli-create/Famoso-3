@@ -271,6 +271,62 @@ const createContactDeclaration = {
   },
 };
 
+// 15. Declaración de herramienta: Consultar Formularios (Google Forms)
+const getGoogleFormsDeclaration = {
+  name: 'getGoogleForms',
+  description: 'Consulta y lista los formularios creados en la cuenta de Google Forms del usuario.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
+// 16. Declaración de herramienta: Crear Formulario (Google Forms)
+const createGoogleFormDeclaration = {
+  name: 'createGoogleForm',
+  description: 'Crea un nuevo formulario o encuesta en Google Forms con su título.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Título o nombre del formulario en Google Forms.',
+      },
+    },
+    required: ['title'],
+  },
+};
+
+// 17. Declaración de herramienta: Listar Espacios de Google Chat
+const getChatSpacesDeclaration = {
+  name: 'getChatSpaces',
+  description: 'Consulta y lista los espacios de trabajo, canales o salas de chat en Google Chat.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
+// 18. Declaración de herramienta: Enviar Mensaje en Google Chat
+const sendChatMessageDeclaration = {
+  name: 'sendChatMessage',
+  description: 'Envía un mensaje de texto a un espacio o canal específico de Google Chat.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      spaceName: {
+        type: Type.STRING,
+        description: 'Nombre del espacio de Google Chat (ej. spaces/general o nombre del canal).',
+      },
+      text: {
+        type: Type.STRING,
+        description: 'Texto o contenido del mensaje a enviar.',
+      },
+    },
+    required: ['text'],
+  },
+};
+
 export interface ToolCallResult {
   name: string;
   args: Record<string, any>;
@@ -307,7 +363,7 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
       contents: userPrompt,
       config: {
         systemInstruction:
-          'Eres Famous Asistente, el administrador personal y ejecutivo de mano derecha del usuario. Tu tono es sumamente profesional, eficiente, claro y conciso. Respondes SIEMPRE con oraciones cortas (máximo 1 o 2 frases breves), diseñadas para ser leídas con total claridad por síntesis de voz (TTS). Si la orden requiere crear tareas, completar tareas, consultar pendientes, guardar notas, programar temporizadores/alarmas con Capacitor, revisar o responder correos con Gmail, consultar y agendar compromisos con Google Calendar, gestionar pendientes en Google Tasks o buscar/crear contactos en Google Contacts, utiliza SIEMPRE la herramienta adecuada.',
+          'Eres Famous Asistente, el administrador personal y ejecutivo de mano derecha del usuario. Tu tono es sumamente profesional, eficiente, claro y conciso. Respondes SIEMPRE con oraciones cortas (máximo 1 o 2 frases breves), diseñadas para ser leídas con total claridad por síntesis de voz (TTS). Si la orden requiere crear tareas, completar tareas, consultar pendientes, guardar notas, programar temporizadores/alarmas con Capacitor, revisar o responder correos con Gmail, consultar y agendar compromisos con Google Calendar, gestionar pendientes en Google Tasks, buscar o crear contactos en Google Contacts, gestionar encuestas con Google Forms o enviar mensajes en Google Chat, utiliza SIEMPRE la herramienta adecuada.',
         tools: [
           {
             functionDeclarations: [
@@ -325,6 +381,10 @@ export async function processUserCommand(userPrompt: string): Promise<ProcessCom
               completeGoogleTaskDeclaration,
               searchContactsDeclaration,
               createContactDeclaration,
+              getGoogleFormsDeclaration,
+              createGoogleFormDeclaration,
+              getChatSpacesDeclaration,
+              sendChatMessageDeclaration,
             ],
           },
         ],
